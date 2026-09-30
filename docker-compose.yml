@@ -1,0 +1,70 @@
+name: import
+
+services:
+    app:
+        build:
+            context: .
+        user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+        working_dir: /var/www/html
+        volumes:
+            - ./:/var/www/html
+        environment:
+            COMPOSER_HOME: /tmp/composer.
+            DB_CONNECTION: mysql
+            DB_HOST: mysql
+            DB_DATABASE: ${DOCKER_DB_NAME:-app}
+            DB_USERNAME: ${DOCKER_DB_USER:-app}
+            DB_PASSWORD: ${DOCKER_DB_PASSWORD:-secret}
+        restart: unless-stopped
+
+    web:
+        image: nginx:1.27-alpine
+        ports:
+            - "8080:80"
+        volumes:
+            - ./:/var/www/html:ro
+            - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+        depends_on:
+            - app
+        restart: unless-stopped
+
+    mysql:
+        profiles: ["mysql"]
+        image: mysql:8.0
+        environment:
+            MYSQL_DATABASE: ${DOCKER_DB_NAME:-app}
+            MYSQL_USER: ${DOCKER_DB_USER:-app}
+            MYSQL_PASSWORD: ${DOCKER_DB_PASSWORD:-secret}
+            MYSQL_ROOT_PASSWORD: ${DOCKER_DB_ROOT_PASSWORD:-root}
+        ports:
+            - "127.0.0.1:3307:3306"
+        volumes:
+            - mysql_data:/var/lib/mysql
+        healthcheck:
+            test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD --silent"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        restart: unless-stopped
+
+    pgsql:
+        profiles: ["pgsql"]
+        image: postgres:16-alpine
+        environment:
+            POSTGRES_DB: ${DOCKER_DB_NAME:-app}
+            POSTGRES_USER: ${DOCKER_DB_USER:-app}
+            POSTGRES_PASSWORD: ${DOCKER_DB_PASSWORD:-secret}
+        ports:
+            - "127.0.0.1:5433:5432"
+        volumes:
+            - pgsql_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+        restart: unless-stopped
+
+volumes:
+    mysql_data:
+    pgsql_data:
